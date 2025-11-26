@@ -634,6 +634,16 @@
       tableHtml += '</tbody></table>';
       document.getElementById('detailedTable').innerHTML = tableHtml;
     }
+    // Parse URL parameters on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const sheetUrl = urlParams.get('sheet');
+
+      if (sheetUrl) {
+        document.getElementById('sheetsUrl').value = sheetUrl;
+        document.getElementById('sheetsConnectBtn').click();
+      }
+    });
   </script>
 </body>
 </html>
