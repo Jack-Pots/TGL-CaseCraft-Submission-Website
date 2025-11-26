@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EdObserve Studio - EdTech Observability Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ["Space Mono", "monospace"],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap");
+    
+    * {
+      font-family: "Space Mono", monospace;
+    }
+
+    .card-hover {
+      transition: all 0.3s ease;
+    }
+
+    .card-hover:hover {
+      transform: translateY(-2px);
+      box-shadow: 4px 4px 0px rgba(0, 0, 0, 1);
+    }
+
+    .grid-bg {
+      background-size: 20px 20px;
+      background-image: 
+        linear-gradient(to right, rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+    }
+
+    .pulse-dot {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: .5;
+      }
+    }
+
+    .data-input-zone {
+      border: 2px dashed #000;
+      transition: all 0.3s ease;
+    }
+
+    .data-input-zone:hover {
+      border-color: #666;
+      background-color: #f9f9f9;
+    }
+
+    .loading-spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #000;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-black min-h-screen">
+  <!-- Top Navigation -->
+  <nav class="bg-black text-white border-b-4 border-gray-900">
+    <div class="max-w-7xl mx-auto px-4 py-4">
+      <div class="flex justify-between items-center">
+        <div class="flex items-center gap-8">
+          <h1 class="text-2xl font-bold tracking-tight">EDOBSERVE<span class="text-xs align-super">STUDIO</span></h1>
+          <div class="hidden md:flex gap-6 text-sm">
+            <a href="#overview" class="hover:underline underline-offset-4 decoration-2">OVERVIEW</a>
+            <a href="#metrics" class="hover:underline underline-offset-4 decoration-2">METRICS</a>
+            <a href="#data" class="hover:underline underline-offset-4 decoration-2">DATA</a>
+            <a href="#reports" class="hover:underline underline-offset-4 decoration-2">REPORTS</a>
+          </div>
+        </div>  
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="max-w-7xl mx-auto px-4 py-8">
+    <!-- Data Input Section -->
+    <section id="data" class="mb-12">
+      <div class="flex justify-between items-center mb-6">
+        <div>
+          <h2 class="text-3xl font-bold mb-2">DATA<span class="text-xs align-super"> SOURCE</span></h2>
+          <p class="text-sm text-gray-600">Upload CSV or connect Google Sheets to visualize your EdTech metrics</p>
+        </div>
+        <button id="sampleDataBtn" class="bg-black text-white px-4 py-2 text-sm hover:bg-gray-800 transition-colors border-2 border-black">
+          LOAD SAMPLE DATA
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- CSV Upload -->
+        <div class="bg-white border-2 border-black p-6">
+          <h3 class="text-xl font-bold mb-4">CSV UPLOAD</h3>
+          <div class="data-input-zone p-8 text-center cursor-pointer" id="csvDropZone">
+            <svg class="mx-auto h-12 w-12 mb-4" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+              <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <p class="text-sm mb-2">Drop CSV file here or click to browse</p>
+            <input type="file" id="csvInput" accept=".csv" class="hidden">
+            <button class="mt-2 border-2 border-black px-4 py-2 text-xs hover:bg-black hover:text-white transition-colors">
+              SELECT FILE
+            </button>
+          </div>
+          <div id="csvFileName" class="mt-4 text-sm text-gray-600 hidden"></div>
+        </div>
+
+        <!-- Google Sheets -->
+        <div class="bg-white border-2 border-black p-6">
+          <h3 class="text-xl font-bold mb-4">GOOGLE SHEETS</h3>
+          <p class="text-sm text-gray-600 mb-4">Enter a public Google Sheets URL or share link</p>
+          <input 
+            type="text" 
+            id="sheetsUrl" 
+            placeholder="https://docs.google.com/spreadsheets/d/..." 
+            class="w-full border-2 border-gray-300 p-3 text-sm focus:border-black focus:outline-none mb-4"
+          >
+          <button id="sheetsConnectBtn" class="w-full bg-black text-white py-3 text-sm hover:bg-gray-800 transition-colors border-2 border-black">
+            CONNECT SHEETS
+          </button>
+          <p class="mt-3 text-xs text-gray-500">Note: Sheet must be publicly accessible or shared with "Anyone with the link"</p>
+        </div>
+      </div>
+
+      <!-- Data Preview -->
+      <div id="dataPreview" class="mt-6 bg-white border-2 border-black p-6 hidden">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-xl font-bold">DATA<span class="text-xs align-super"> PREVIEW</span></h3>
+          <button id="clearDataBtn" class="text-sm underline hover:no-underline">CLEAR DATA</button>
+        </div>
+        <div id="dataTable" class="overflow-x-auto"></div>
+        <div id="dataStats" class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4"></div>
+      </div>
+    </section>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="text-center py-12 hidden">
+      <div class="loading-spinner mx-auto mb-4"></div>
+      <p class="text-sm text-gray-600">Processing data...</p>
+    </div>
+
+    <!-- Dashboard Overview -->
+    <section id="overview" class="mb-12 hidden">
+      <h2 class="text-3xl font-bold mb-6">DASH<span class="text-xs align-super">BOARD</span></h2>
+      
+      <!-- Key Metrics Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8" id="keyMetrics">
+        <!-- Metrics will be populated by JavaScript -->
+      </div>
+
+      <!-- Charts Row -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Enrollment Trend -->
+        <div class="bg-white border-2 border-black p-6">
+          <h3 class="text-xl font-bold mb-4">ENROLLMENT<span class="text-xs align-super"> TREND</span></h3>
+          <canvas id="enrollmentChart"></canvas>
+        </div>
+
+        <!-- Revenue Analysis -->
+        <div class="bg-white border-2 border-black p-6">
+          <h3 class="text-xl font-bold mb-4">REVENUE<span class="text-xs align-super"> ANALYSIS</span></h3>
+          <canvas id="revenueChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Additional Metrics -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Course Performance -->
+        <div class="bg-white border-2 border-black p-6">
+          <h3 class="text-xl font-bold mb-4">COURSE<span class="text-xs align-super"> PERFORMANCE</span></h3>
+          <canvas id="courseChart"></canvas>
+        </div>
+
+        <!-- Learner Engagement -->
+        <div class="bg-white border-2 border-black p-6">
+          <h3 class="text-xl font-bold mb-4">LEARNER<span class="text-xs align-super"> ENGAGEMENT</span></h3>
+          <canvas id="engagementChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Data Table Section -->
+    <section id="metrics" class="mb-12 hidden">
+      <h2 class="text-3xl font-bold mb-6">DETAILED<span class="text-xs align-super"> METRICS</span></h2>
+      <div class="bg-white border-2 border-black overflow-hidden">
+        <div id="detailedTable"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Footer -->
+  <footer class="mt-16 py-8 border-t-2 border-gray-300">
+    <div class="max-w-7xl mx-auto px-4 text-center">
+      <p class="text-sm text-gray-600">EdObserve Studio • Observability Dashboard • Built with MONO Design System</p>
+    </div>
+  </footer>
+
+  <script>
+    // Global state
+    let currentData = null;
+    let charts = {};
+
+    // Sample data generator
+    function generateSampleData() {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+      const courses = ['Web Development', 'Data Science', 'UI/UX Design', 'Digital Marketing', 'AI/ML'];
+      const data = [];
+
+      months.forEach((month, i) => {
+        courses.forEach(course => {
+          data.push({
+            month: month,
+            course: course,
+            enrollments: Math.floor(Math.random() * 100) + 50,
+            revenue: Math.floor(Math.random() * 50000) + 20000,
+            completion_rate: Math.floor(Math.random() * 40) + 60,
+            satisfaction: (Math.random() * 2 + 3).toFixed(1)
+          });
+        });
+      });
+
+      return data;
+    }
+
+    // CSV file handling
+    document.getElementById('csvDropZone').addEventListener('click', () => {
+      document.getElementById('csvInput').click();
+    });
+
+    document.getElementById('csvInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        document.getElementById('csvFileName').textContent = `Selected: ${file.name}`;
+        document.getElementById('csvFileName').classList.remove('hidden');
+        parseCSV(file);
+      }
+    });
+
+    // Parse CSV
+    function parseCSV(file) {
+      showLoading();
+      Papa.parse(file, {
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          currentData = results.data;
+          hideLoading();
+          displayData(currentData);
+          generateDashboard(currentData);
+        },
+        error: function(error) {
+          hideLoading();
+          alert('Error parsing CSV: ' + error.message);
+        }
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+    // Automatically load sample data when page loads
+    currentData = generateSampleData();
+    displayData(currentData);
+    generateDashboard(currentData);
+    });
+
+    // Google Sheets connection
+    document.getElementById('sheetsConnectBtn').addEventListener('click', () => {
+      const url = document.getElementById('sheetsUrl').value.trim();
+      if (!url) {
+        alert('Please enter a Google Sheets URL');
+        return;
+      }
+
+      // Extract sheet ID and convert to CSV export URL
+      const sheetIdMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      if (!sheetIdMatch) {
+        alert('Invalid Google Sheets URL');
+        return;
+      }
+
+      const sheetId = sheetIdMatch[1];
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+
+      showLoading();
+      Papa.parse(csvUrl, {
+        download: true,
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          currentData = results.data;
+          hideLoading();
+          displayData(currentData);
+          generateDashboard(currentData);
+        },
+        error: function(error) {
+          hideLoading();
+          alert('Error loading Google Sheets. Make sure the sheet is publicly accessible.');
+        }
+      });
+    });
+
+    // Sample data button
+    document.getElementById('sampleDataBtn').addEventListener('click', () => {
+      currentData = generateSampleData();
+      displayData(currentData);
+      generateDashboard(currentData);
+    });
+
+    // Clear data button
+    document.getElementById('clearDataBtn').addEventListener('click', () => {
+      currentData = null;
+      document.getElementById('dataPreview').classList.add('hidden');
+      document.getElementById('overview').classList.add('hidden');
+      document.getElementById('metrics').classList.add('hidden');
+      document.getElementById('csvFileName').classList.add('hidden');
+      document.getElementById('sheetsUrl').value = '';
+      
+      // Destroy existing charts
+      Object.values(charts).forEach(chart => chart.destroy());
+      charts = {};
+    });
+
+    // Show/hide loading
+    function showLoading() {
+      document.getElementById('loadingState').classList.remove('hidden');
+    }
+
+    function hideLoading() {
+      document.getElementById('loadingState').classList.add('hidden');
+    }
+
+    // Display data preview
+    function displayData(data) {
+      if (!data || data.length === 0) return;
+
+      document.getElementById('dataPreview').classList.remove('hidden');
+
+      // Create table
+      const headers = Object.keys(data[0]);
+      let tableHtml = '<table class="w-full text-sm"><thead class="border-b-2 border-black"><tr>';
+      headers.forEach(header => {
+        tableHtml += `<th class="p-3 text-left text-xs uppercase tracking-widest">${header}</th>`;
+      });
+      tableHtml += '</tr></thead><tbody>';
+
+      // Show first 5 rows
+      data.slice(0, 5).forEach((row, i) => {
+        tableHtml += `<tr class="${i % 2 === 0 ? 'bg-gray-50' : ''}">`;
+        headers.forEach(header => {
+          tableHtml += `<td class="p-3">${row[header] || '-'}</td>`;
+        });
+        tableHtml += '</tr>';
+      });
+      tableHtml += '</tbody></table>';
+
+      if (data.length > 5) {
+        tableHtml += `<p class="text-xs text-gray-500 mt-2">Showing 5 of ${data.length} rows</p>`;
+      }
+
+      document.getElementById('dataTable').innerHTML = tableHtml;
+
+      // Data stats
+      const statsHtml = `
+        <div class="bg-gray-50 border border-gray-300 p-3">
+          <div class="text-xs uppercase tracking-widest text-gray-500 mb-1">TOTAL ROWS</div>
+          <div class="text-2xl font-bold">${data.length}</div>
+        </div>
+        <div class="bg-gray-50 border border-gray-300 p-3">
+          <div class="text-xs uppercase tracking-widest text-gray-500 mb-1">COLUMNS</div>
+          <div class="text-2xl font-bold">${headers.length}</div>
+        </div>
+        <div class="bg-gray-50 border border-gray-300 p-3">
+          <div class="text-xs uppercase tracking-widest text-gray-500 mb-1">DATA TYPE</div>
+          <div class="text-2xl font-bold">CSV</div>
+        </div>
+        <div class="bg-gray-50 border border-gray-300 p-3">
+          <div class="text-xs uppercase tracking-widest text-gray-500 mb-1">STATUS</div>
+          <div class="text-2xl font-bold text-green-600">READY</div>
+        </div>
+      `;
+      document.getElementById('dataStats').innerHTML = statsHtml;
+    }
+
+    // Generate dashboard
+    function generateDashboard(data) {
+      if (!data || data.length === 0) return;
+
+      document.getElementById('overview').classList.remove('hidden');
+      document.getElementById('metrics').classList.remove('hidden');
+
+      // Calculate key metrics
+      const totalEnrollments = data.reduce((sum, row) => sum + (row.enrollments || 0), 0);
+      const totalRevenue = data.reduce((sum, row) => sum + (row.revenue || 0), 0);
+      const avgCompletion = data.reduce((sum, row) => sum + (row.completion_rate || 0), 0) / data.length;
+      const avgSatisfaction = data.reduce((sum, row) => sum + parseFloat(row.satisfaction || 0), 0) / data.length;
+
+      // Display key metrics
+      document.getElementById('keyMetrics').innerHTML = `
+        <div class="bg-white border-2 border-black p-6 card-hover">
+          <div class="text-xs uppercase tracking-widest text-gray-500 mb-2">TOTAL ENROLLMENTS</div>
+          <div class="text-4xl font-bold">${totalEnrollments.toLocaleString()}</div>
+        </div>
+        <div class="bg-white border-2 border-black p-6 card-hover">
+          <div class="text-xs uppercase tracking-widest text-gray-500 mb-2">TOTAL REVENUE</div>
+          <div class="text-4xl font-bold">₹${(totalRevenue / 1000).toFixed(0)}K</div>
+        </div>
+        <div class="bg-white border-2 border-black p-6 card-hover">
+          <div class="text-xs uppercase tracking-widest text-gray-500 mb-2">AVG COMPLETION</div>
+          <div class="text-4xl font-bold">${avgCompletion.toFixed(0)}%</div>
+        </div>
+        <div class="bg-white border-2 border-black p-6 card-hover">
+          <div class="text-xs uppercase tracking-widest text-gray-500 mb-2">AVG SATISFACTION</div>
+          <div class="text-4xl font-bold">${avgSatisfaction.toFixed(1)}/5</div>
+        </div>
+      `;
+
+      // Create charts
+      createEnrollmentChart(data);
+      createRevenueChart(data);
+      createCourseChart(data);
+      createEngagementChart(data);
+      createDetailedTable(data);
+    }
+
+    // Create enrollment chart
+    function createEnrollmentChart(data) {
+      const ctx = document.getElementById('enrollmentChart');
+      if (!ctx) return;
+
+      // Destroy existing chart
+      if (charts.enrollment) charts.enrollment.destroy();
+
+      // Aggregate by month
+      const monthlyData = {};
+      data.forEach(row => {
+        const month = row.month;
+        if (!monthlyData[month]) monthlyData[month] = 0;
+        monthlyData[month] += row.enrollments || 0;
+      });
+
+      charts.enrollment = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: Object.keys(monthlyData),
+          datasets: [{
+            label: 'Enrollments',
+            data: Object.values(monthlyData),
+            borderColor: '#ff9a00',
+            backgroundColor: 'rgba(0, 0, 0, 0.1)',
+            borderWidth: 2,
+            tension: 0.1
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    // Create revenue chart
+    function createRevenueChart(data) {
+      const ctx = document.getElementById('revenueChart');
+      if (!ctx) return;
+
+      if (charts.revenue) charts.revenue.destroy();
+
+      const monthlyRevenue = {};
+      data.forEach(row => {
+        const month = row.month;
+        if (!monthlyRevenue[month]) monthlyRevenue[month] = 0;
+        monthlyRevenue[month] += row.revenue || 0;
+      });
+
+      charts.revenue = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(monthlyRevenue),
+          datasets: [{
+            label: 'Revenue',
+            data: Object.values(monthlyRevenue),
+            backgroundColor: '#000',
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    // Create course chart
+    function createCourseChart(data) {
+      const ctx = document.getElementById('courseChart');
+      if (!ctx) return;
+
+      if (charts.course) charts.course.destroy();
+
+      const courseData = {};
+      data.forEach(row => {
+        const course = row.course;
+        if (!courseData[course]) courseData[course] = 0;
+        courseData[course] += row.enrollments || 0;
+      });
+
+      // Get top 5 courses
+      const topCourses = Object.entries(courseData)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+      charts.course = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: topCourses.map(c => c[0]),
+          datasets: [{
+            label: 'Enrollments by Course',
+            data: topCourses.map(c => c[1]),
+            backgroundColor: ['#63099c', '#540991', '#4a0a8a', '#38097a', '#230b66'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    // Create engagement chart
+    function createEngagementChart(data) {
+      const ctx = document.getElementById('engagementChart');
+      if (!ctx) return;
+
+      if (charts.engagement) charts.engagement.destroy();
+
+      const courseEngagement = {};
+      const courseCount = {};
+
+      data.forEach(row => {
+        const course = row.course;
+        if (!courseEngagement[course]) {
+          courseEngagement[course] = 0;
+          courseCount[course] = 0;
+        }
+        courseEngagement[course] += row.completion_rate || 0;
+        courseCount[course]++;
+      });
+
+      const avgEngagement = Object.keys(courseEngagement).map(course => ({
+        course,
+        avg: courseEngagement[course] / courseCount[course]
+      })).sort((a, b) => b.avg - a.avg).slice(0, 5);
+
+      charts.engagement = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: avgEngagement.map(e => e.course),
+          datasets: [{
+            data: avgEngagement.map(e => e.avg),
+            backgroundColor: ['#0078ff', '#bd00ff', '#ff9a00', '#01ff1f', '#e3ff00'],
+            borderWidth: 2,
+            borderColor: '#fff'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: 'bottom'
+            }
+          }
+        }
+      });
+    }
+
+    // Create detailed table
+    function createDetailedTable(data) {
+      const headers = Object.keys(data[0]);
+      let tableHtml = '<table class="w-full text-sm"><thead class="border-b-2 border-black bg-gray-50"><tr>';
+      headers.forEach(header => {
+        tableHtml += `<th class="p-4 text-left text-xs uppercase tracking-widest">${header}</th>`;
+      });
+      tableHtml += '</tr></thead><tbody>';
+
+      data.forEach((row, i) => {
+        tableHtml += `<tr class="border-b border-gray-200 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}">`;
+        headers.forEach(header => {
+          tableHtml += `<td class="p-4">${row[header] || '-'}</td>`;
+        });
+        tableHtml += '</tr>';
+      });
+
+      tableHtml += '</tbody></table>';
+      document.getElementById('detailedTable').innerHTML = tableHtml;
+    }
+  </script>
+</body>
+</html>
